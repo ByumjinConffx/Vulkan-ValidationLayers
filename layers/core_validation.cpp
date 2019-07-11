@@ -12957,7 +12957,8 @@ void CoreChecks::PostCallRecordGetSwapchainImagesKHR(VkDevice device, VkSwapchai
             image_layout_node.format = swapchain_state->createInfo.imageFormat;
             // Add imageMap entries for each swapchain image
             VkImageCreateInfo image_ci = {};
-            image_ci.flags = 0;
+            image_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            image_ci.flags = VK_IMAGE_CREATE_ALIAS_BIT;
             image_ci.imageType = VK_IMAGE_TYPE_2D;
             image_ci.format = swapchain_state->createInfo.imageFormat;
             image_ci.extent.width = swapchain_state->createInfo.imageExtent.width;

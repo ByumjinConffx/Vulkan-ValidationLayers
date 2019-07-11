@@ -122,6 +122,11 @@ bool IMAGE_STATE::IsCompatibleAliasing(IMAGE_STATE *other_image_state) {
 
         return true;
     }
+    if ((bind_swapchain == other_image_state->bind_swapchain) && (bind_swapchain != VK_NULL_HANDLE)) {
+        aliasing_images.insert(other_image_state->image);
+        other_image_state->aliasing_images.insert(this->image);
+        return true;
+    }
     return false;
 }
 
