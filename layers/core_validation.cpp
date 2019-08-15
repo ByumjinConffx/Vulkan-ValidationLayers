@@ -4293,7 +4293,7 @@ bool CoreChecks::ValidateInsertMemoryRange(const VulkanTypedHandle &typed_handle
 void ValidationStateTracker::InsertMemoryRange(const VulkanTypedHandle &typed_handle, DEVICE_MEMORY_STATE *mem_info,
                                                VkDeviceSize memoryOffset, VkMemoryRequirements memRequirements, bool is_linear) {
     if (typed_handle.type == kVulkanObjectTypeImage) {
-        mem_info->bound_images.insert(typed_handle.handle);
+        mem_info->bound_images.insert(CastFromUint64<VkImage>(typed_handle.handle));
     } else if (typed_handle.type == kVulkanObjectTypeBuffer) {
         mem_info->bound_buffers.insert(typed_handle.handle);
     } else if (typed_handle.type == kVulkanObjectTypeAccelerationStructureNV) {
@@ -4338,7 +4338,7 @@ void ValidationStateTracker::InsertAccelerationStructureMemoryRange(VkAccelerati
 // This function will remove the handle-to-index mapping from the appropriate map.
 static void RemoveMemoryRange(uint64_t handle, DEVICE_MEMORY_STATE *mem_info, VulkanObjectType object_type) {
     if (object_type == kVulkanObjectTypeImage) {
-        mem_info->bound_images.erase(handle);
+        mem_info->bound_images.erase(CastFromUint64<VkImage>(handle));
     } else if (object_type == kVulkanObjectTypeBuffer) {
         mem_info->bound_buffers.erase(handle);
     } else if (object_type == kVulkanObjectTypeAccelerationStructureNV) {
