@@ -571,12 +571,12 @@ VKAPI_ATTR void VKAPI_CALL DestroyInstance(VkInstance instance, const VkAllocati
     // Clean up logging callback, if any
     while (layer_data->logging_messenger.size() > 0) {
         VkDebugUtilsMessengerEXT messenger = layer_data->logging_messenger.back();
-        layer_destroy_messenger_callback(layer_data->report_data, messenger, pAllocator);
+        layer_destroy_callback(layer_data->report_data, messenger, pAllocator);
         layer_data->logging_messenger.pop_back();
     }
     while (layer_data->logging_callback.size() > 0) {
         VkDebugReportCallbackEXT callback = layer_data->logging_callback.back();
-        layer_destroy_report_callback(layer_data->report_data, callback, pAllocator);
+        layer_destroy_callback(layer_data->report_data, callback, pAllocator);
         layer_data->logging_callback.pop_back();
     }
 
@@ -647,7 +647,7 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
     device_interceptor->device = *pDevice;
     device_interceptor->physical_device = gpu;
     device_interceptor->instance = instance_interceptor->instance;
-    device_interceptor->report_data = layer_debug_utils_create_device(instance_interceptor->report_data, *pDevice);
+    device_interceptor->report_data = instance_interceptor->report_data;
 
     // Note that this defines the order in which the layer validation objects are called
 #if BUILD_THREAD_SAFETY
@@ -724,7 +724,6 @@ VKAPI_ATTR void VKAPI_CALL DestroyDevice(VkDevice device, const VkAllocationCall
         auto lock = intercept->write_lock();
         intercept->PreCallRecordDestroyDevice(device, pAllocator);
     }
-    layer_debug_utils_destroy_device(device);
 
     layer_data->device_dispatch_table.DestroyDevice(device, pAllocator);
 
@@ -6600,7 +6599,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDebugReportCallbackEXT(
         intercept->PreCallRecordDestroyDebugReportCallbackEXT(instance, callback, pAllocator);
     }
     DispatchDestroyDebugReportCallbackEXT(instance, callback, pAllocator);
-    layer_destroy_report_callback(layer_data->report_data, callback, pAllocator);
+    layer_destroy_callback(layer_data->report_data, callback, pAllocator);
     for (auto intercept : layer_data->object_dispatch) {
         auto lock = intercept->write_lock();
         intercept->PostCallRecordDestroyDebugReportCallbackEXT(instance, callback, pAllocator);
@@ -7967,7 +7966,7 @@ VKAPI_ATTR void VKAPI_CALL DestroyDebugUtilsMessengerEXT(
         intercept->PreCallRecordDestroyDebugUtilsMessengerEXT(instance, messenger, pAllocator);
     }
     DispatchDestroyDebugUtilsMessengerEXT(instance, messenger, pAllocator);
-    layer_destroy_messenger_callback(layer_data->report_data, messenger, pAllocator);
+    layer_destroy_callback(layer_data->report_data, messenger, pAllocator);
     for (auto intercept : layer_data->object_dispatch) {
         auto lock = intercept->write_lock();
         intercept->PostCallRecordDestroyDebugUtilsMessengerEXT(instance, messenger, pAllocator);
