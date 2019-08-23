@@ -528,83 +528,28 @@ static inline VkResult layer_create_report_callback(debug_report_data *debug_dat
     return VK_SUCCESS;
 }
 
-// This utility (called at vkCreateInstance() time), looks at a pNext chain. It counts any VkDebugUtilsMessengerCreateInfoEXT
-// structs that it finds.  It then allocates an array that can hold that many structs, as well as that  many
-// VkDebugUtilsMessengerEXT handles.  It then copies each VkDebugUtilsMessengerCreateInfoEXT, and initializes each handle.
-static inline VkResult layer_copy_tmp_debug_messengers(const void *pChain, uint32_t *num_messengers,
-                                                       VkDebugUtilsMessengerCreateInfoEXT **infos,
-                                                       VkDebugUtilsMessengerEXT **messengers) {
-    uint32_t n = *num_messengers = 0;
-
-    const void *pNext = pChain;
-    while (pNext) {
-        // 1st, count the number VkDebugUtilsMessengerCreateInfoEXT:
-        if (((VkDebugUtilsMessengerCreateInfoEXT *)pNext)->sType == VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT) {
-            n++;
-        }
-        pNext = (void *)((VkDebugUtilsMessengerCreateInfoEXT *)pNext)->pNext;
+static inline void ActivateInstanceDebugCallbacks(debug_report_data *debug_data, const void *pNext) {
+    auto current = pNext;
+    for (;;) {
+        auto create_info = lvl_find_in_chain<VkDebugUtilsMessengerCreateInfoEXT>(current);
+        if (!create_info) return;
+        current = create_info->pNext;
+        VkDebugUtilsMessengerEXT utils_callback{};
+        layer_create_callback((DEBUG_CALLBACK_MESSENGER | DEBUG_CALLBACK_INSTANCE), debug_data, create_info, nullptr,
+                              &utils_callback);
     }
-    if (n == 0) {
-        return VK_SUCCESS;
-    }
-
-    // 2nd, allocate memory for each VkDebugUtilsMessengerCreateInfoEXT:
-    VkDebugUtilsMessengerCreateInfoEXT *pInfos = *infos =
-        ((VkDebugUtilsMessengerCreateInfoEXT *)malloc(n * sizeof(VkDebugUtilsMessengerCreateInfoEXT)));
-    if (!pInfos) {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-    // 3rd, allocate memory for a unique handle for each messenger:
-    VkDebugUtilsMessengerEXT *pMessengers = *messengers =
-        ((VkDebugUtilsMessengerEXT *)malloc(n * sizeof(VkDebugUtilsMessengerEXT)));
-    if (!pMessengers) {
-        free(pInfos);
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-    // 4th, copy each VkDebugUtilsMessengerCreateInfoEXT for use by vkDestroyInstance, and assign a unique handle to each callback
-    // (just use the address of the copied VkDebugUtilsMessengerCreateInfoEXT):
-    pNext = pChain;
-    while (pNext) {
-        if (((VkInstanceCreateInfo *)pNext)->sType == VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT) {
-            memcpy(pInfos, pNext, sizeof(VkDebugUtilsMessengerCreateInfoEXT));
-            *pMessengers++ = (VkDebugUtilsMessengerEXT)pInfos++;
-        }
-        pNext = (void *)((VkInstanceCreateInfo *)pNext)->pNext;
-    }
-
-    *num_messengers = n;
-    return VK_SUCCESS;
 }
 
-// This utility frees the arrays allocated by layer_copy_tmp_debug_messengers()
-static inline void layer_free_tmp_debug_messengers(VkDebugUtilsMessengerCreateInfoEXT *infos,
-                                                   VkDebugUtilsMessengerEXT *messengers) {
-    free(infos);
-    free(messengers);
-}
-
-// This utility enables all of the VkDebugUtilsMessengerCreateInfoEXT structs that were copied by layer_copy_tmp_debug_messengers()
-static inline VkResult layer_enable_tmp_debug_messengers(debug_report_data *debug_data, uint32_t num_messengers,
-                                                         VkDebugUtilsMessengerCreateInfoEXT *infos,
-                                                         VkDebugUtilsMessengerEXT *messengers) {
-    VkResult rtn = VK_SUCCESS;
-    for (uint32_t i = 0; i < num_messengers; i++) {
-        rtn = layer_create_messenger_callback(debug_data, false, &infos[i], NULL, &messengers[i]);
-        if (rtn != VK_SUCCESS) {
-            for (uint32_t j = 0; j < i; j++) {
-                layer_destroy_callback(debug_data, messengers[j], NULL);
-            }
-            return rtn;
+static inline void DeactivateInstanceDebugCallbacks(debug_report_data *debug_data, const void *pNext) {
+    if (!lvl_find_in_chain<VkDebugUtilsMessengerCreateInfoEXT>(pNext)) return;
+    std::vector<VkDebugUtilsMessengerEXT> instance_callback_handles{};
+    for (auto item : debug_data->debug_callback_list) {
+        if (item.IsInstance()) {
+            instance_callback_handles.push_back(item.debug_utils_callback_object);
         }
     }
-    return rtn;
-}
-
-// This utility disables all of the VkDebugUtilsMessengerCreateInfoEXT structs that were copied by layer_copy_tmp_debug_messengers()
-static inline void layer_disable_tmp_debug_messengers(debug_report_data *debug_data, uint32_t num_messengers,
-                                                      VkDebugUtilsMessengerEXT *messengers) {
-    for (uint32_t i = 0; i < num_messengers; i++) {
-        layer_destroy_callback(debug_data, messengers[i], NULL);
+    for (auto item : instance_callback_handles) {
+        layer_destroy_callback(debug_data, item, nullptr);
     }
 }
 
