@@ -10633,6 +10633,73 @@ bool CoreChecks::PreCallValidateCreateRenderPass(VkDevice device, const VkRender
                             "Dependency count is %u but multiview info has a dependency count of %u.", pCreateInfo->dependencyCount,
                             pMultiviewInfo->dependencyCount);
         }
+
+        for (uint32_t i = 0; i < pCreateInfo->dependencyCount; ++i) {
+            auto const &dependency = pCreateInfo->pDependencies[i];
+
+            if (((dependency.dependencyFlags & VK_DEPENDENCY_VIEW_LOCAL_BIT) == 0) && pMultiviewInfo->pViewOffsets[i] != 0) {
+                skip |= log_msg(report_data, VK_DEBUG_REPORT_ERROR_BIT_EXT, VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, 0,
+                                "VUID-VkRenderPassCreateInfo-pNext-02512",
+                                "Dependency %u does not include VK_DEPENDENCY_VIEW_LOCAL_BIT, then the corresponding "
+                                "pViewOffsets[%u] must be 0. pViewOffsets[%u]: &u\n",
+                                i, i, i, pMultiviewInfo->pViewOffsets[i]);
+            }
+        }
+
+        for (uint32_t i = 0; i < pCreateInfo->subpassCount; ++i) {
+            uint32_t view_bits = pMultiviewInfo->pViewMasks[i];
+            uint32_t max_bit = 0;
+            bool zero_mask = true;
+            bool rule_violation = false;
+
+            for (int j = 0; j < 32; ++j) {
+                if (((view_bits >> j) & 1) != 0) {
+                    zero_mask = false;
+                    if (max_bit == 0) max_bit = 31 - j;
+                } else {
+                    if (!zero_mask) rule_violation = true;
+                }
+            }
+
+            if (rule_violation) {
+                skip |= log_msg(
+                    report_data, VK_DEBUG_REPORT_ERROR_BIT_EXT, VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, 0,
+                    "VUID-VkRenderPassCreateInfo-pNext-02513",
+                    "The current render pass includes a multiview info, then elements of pViewMasks[%u] must be either all be 0, "
+                    "or all not be 0. pViewMasks[%u]: %u\n",
+                    i, i, view_bits);
+            }
+
+            if (max_bit >= phys_dev_props.limits.maxFramebufferLayers) {
+                skip |= log_msg(report_data, VK_DEBUG_REPORT_ERROR_BIT_EXT, VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, 0,
+                                "VUID-VkRenderPassCreateInfo-pNext-02516",
+                                "The current render pass includes a multiview info, then elements of pViewMasks[%u] must not have "
+                                "a bit set at an index greater than or equal to physical device "
+                                "limits. max bit set of pViewMasks[%u]: %u, device max: %u\n",
+                                i, i, max_bit, phys_dev_props.limits.maxFramebufferLayers);
+            }
+
+            if (zero_mask) {
+                for (uint32_t k = 0; k < pCreateInfo->dependencyCount; ++k) {
+                    auto const &dependency = pCreateInfo->pDependencies[k];
+                    if ((dependency.dependencyFlags & VK_DEPENDENCY_VIEW_LOCAL_BIT) != 0) {
+                        skip |= log_msg(report_data, VK_DEBUG_REPORT_ERROR_BIT_EXT, VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, 0,
+                                        "VUID-VkRenderPassCreateInfo-pNext-02514",
+                                        "The current render pass includes a multiview info and pViewMasks[%u] is 0, then "
+                                        "pDependencies[%u] must not include "
+                                        "VK_DEPENDENCY_VIEW_LOCAL_BIT.",
+                                        i, k);
+                    }
+                }
+                if (pMultiviewInfo->correlationMaskCount != 0) {
+                    skip |= log_msg(report_data, VK_DEBUG_REPORT_ERROR_BIT_EXT, VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, 0,
+                                    "VUID-VkRenderPassCreateInfo-pNext-02515",
+                                    "The current render pass includes a multiview info and pViewMasks[%u] is 0, but "
+                                    "correlatedViewMaskCount is not 0. pViewMasks[%u]: %u, correlatedViewMaskCount: %u\n",
+                                    i, i, view_bits, pMultiviewInfo->correlationMaskCount);
+                }
+            }
+        }
     }
     const VkRenderPassInputAttachmentAspectCreateInfo *pInputAttachmentAspectInfo =
         lvl_find_in_chain<VkRenderPassInputAttachmentAspectCreateInfo>(pCreateInfo->pNext);
